@@ -3,6 +3,7 @@ package AMPS
 import play.api.libs.json._
 
 object TradeJsonParser {
+
   implicit val tradeFormat: Format[Trade] = Json.format[Trade]
 
   def parseTrade(jsonString: String): Trade = {
@@ -13,7 +14,5 @@ object TradeJsonParser {
   def toJson(trade: Trade): String = {
     Json.stringify(Json.toJson(trade))
   }
+
 }
-
-
-

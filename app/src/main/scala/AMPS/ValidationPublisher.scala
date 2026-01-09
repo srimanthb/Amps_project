@@ -3,7 +3,7 @@ package AMPS
 import com.crankuptheamps.client._
 
 object ValidationPublisher {
-  private val ampsServer = "tcp://192.168.20.122:9007/amps/json"
+  private val ampsServer = "tcp://192.168.20.60:9007/amps/json"
   private var client: Client = _
 
   private def init(): Unit = {
@@ -28,7 +28,7 @@ object ValidationPublisher {
     try {
       println(s"Publishing to topic: $topic")
       client.publish(topic, jsonData)
-      println("Published to Ameer successfully")
+      println("Published successfully")
     } catch {
       case e: Exception =>
         println(s"Publishing error: ${e.getMessage}")

@@ -5,14 +5,14 @@ import com.crankuptheamps.client._
 object ValidationSubscriber {
 
   def main(args: Array[String]): Unit = {
-    println("Validation Service starting...")
 
+    println("Validation Service starting...")
     val validationRules = DatabaseConfig.loadValidationRules()
     println(s"Rules loaded for: ${validationRules.keys.mkString(", ")}")
 
-    val ampsServer = "tcp://192.168.20.184:9007/amps/json"
-    val subscribeTopic = "trades.raw"
-    val publishTopic = "validated"
+    val ampsServer = "tcp://192.168.20.60:9007/amps/json"
+    val subscribeTopic = "trades.enriched"
+    val publishTopic = "trades.validated"
 
     val client = new Client("ValidationService")
 
@@ -30,12 +30,12 @@ object ValidationSubscriber {
       val messageStream = client.execute(command)
 
       println("Successfully subscribed")
-      println("Waiting for messages from Vinesh...")
+      println("Waiting for messages ...")
       println("Will run for 2 minutes then terminate")
 
       val iterator = messageStream.iterator()
       val startTime = System.currentTimeMillis()
-      val timeout = 2 * 60 * 1000 // 2 minutes in milliseconds
+      val timeout = 2 * 60 * 1000
 
       while (iterator.hasNext && (System.currentTimeMillis() - startTime) < timeout) {
         val message = iterator.next()
@@ -123,7 +123,6 @@ object ValidationSubscriber {
       case e: Exception =>
         println(s"getData error: ${e.getMessage}")
     }
-
     "{}"
   }
 }

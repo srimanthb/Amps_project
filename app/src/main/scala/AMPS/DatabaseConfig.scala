@@ -20,8 +20,8 @@ object DatabaseConfig {
                              taxRate: BigDecimal
                            )
 
-  private def getConnection: Connection = {
-    Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver")
+    private def getConnection: Connection = {
+//    Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver")
     DriverManager.getConnection(url, username, password)
   }
 
