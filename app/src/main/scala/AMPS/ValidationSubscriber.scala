@@ -1,12 +1,18 @@
 package AMPS
 
 import com.crankuptheamps.client._
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import scala.util.Try
+import play.api.libs.json._
 
 object ValidationSubscriber {
 
-  def main(args: Array[String]): Unit = {
+  private var isRunning = true
 
+  def main(args: Array[String]): Unit = {
     println("Validation Service starting...")
+
     val validationRules = DatabaseConfig.loadValidationRules()
     println(s"Rules loaded for: ${validationRules.keys.mkString(", ")}")
 
@@ -22,27 +28,33 @@ object ValidationSubscriber {
       client.logon()
       println("Connected to AMPS")
 
-      println(s"Subscribing to: $subscribeTopic")
+      val scheduler = Executors.newScheduledThreadPool(1)
 
-      val command = new Command("subscribe")
-      command.setTopic(subscribeTopic)
-
-      val messageStream = client.execute(command)
-
-      println("Successfully subscribed")
-      println("Waiting for messages ...")
-      println("Will run for 2 minutes then terminate")
-
-      val iterator = messageStream.iterator()
-      val startTime = System.currentTimeMillis()
-      val timeout = 2 * 60 * 1000
-
-      while (iterator.hasNext && (System.currentTimeMillis() - startTime) < timeout) {
-        val message = iterator.next()
-        processMessage(message, client, validationRules, publishTopic)
+      val task = new Runnable {
+        def run(): Unit = {
+          if (isRunning) {
+            checkForNewTrades(client, validationRules, publishTopic, subscribeTopic)
+          }
+        }
       }
 
-      println(s"\nTimeout reached (${timeout/1000} seconds). Stopping...")
+      scheduler.scheduleAtFixedRate(task, 0, 2, TimeUnit.SECONDS)
+
+      println(s"Scheduler started - checking $subscribeTopic every 5 seconds for NEW trades")
+      println("Will run for 2 minutes then terminate")
+
+      Thread.sleep(2 * 60 * 1000)
+
+      println("\nTimeout reached (2 minutes). Stopping...")
+      isRunning = false
+
+      Try {
+        scheduler.shutdown()
+        if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+          scheduler.shutdownNow()
+        }
+        println("Scheduler stopped")
+      }
 
     } catch {
       case e: Exception =>
@@ -55,28 +67,67 @@ object ValidationSubscriber {
     }
   }
 
-  private def processMessage(
-                              message: Message,
-                              client: Client,
-                              validationRules: Map[String, DatabaseConfig.ValidationRule],
-                              publishTopic: String
-                            ): Unit = {
+  private def checkForNewTrades(
+                                 client: Client,
+                                 validationRules: Map[String, DatabaseConfig.ValidationRule],
+                                 publishTopic: String,
+                                 subscribeTopic: String
+                               ): Unit = {
+    try {
+      val messageHandler = new MessageHandler {
+        override def invoke(message: Message): Unit = {
+          processTradeMessage(message, client, validationRules, publishTopic)
+        }
+      }
+
+      val command = new Command("subscribe")
+        .setTopic(subscribeTopic)
+        .setFilter("/status = 'ENRICHED'")
+        .setCommandId(s"check_new_trades_${System.currentTimeMillis()}")
+        .setTimeout(5000)
+
+      client.executeAsync(command, messageHandler)
+
+      Thread.sleep(1000)
+
+    } catch {
+      case _: com.crankuptheamps.client.exception.InvalidTopicException =>
+        println(s"[${new java.util.Date()}] Topic '$subscribeTopic' not found. Waiting for it to be created...")
+      case e: Exception if e.getMessage.contains("timeout") =>
+        println(s"[${new java.util.Date()}] No ENRICHED trades available")
+      case e: Exception =>
+        println(s"[${new java.util.Date()}] Error checking for trades: ${e.getMessage}")
+    }
+  }
+
+  private def processTradeMessage(
+                                   message: Message,
+                                   client: Client,
+                                   validationRules: Map[String, DatabaseConfig.ValidationRule],
+                                   publishTopic: String
+                                 ): Unit = {
     try {
       println("\n" + "=" * 60)
-      println("RAW DATA RECEIVED FROM VINESH:")
+      println(s"[${new java.util.Date()}] NEW TRADE RECEIVED")
       println("=" * 60)
 
       val jsonData = extractDataFromMessage(message)
+      println("RAW DATA:")
       println(jsonData)
       println("=" * 60)
 
       println("\nPARSING JSON DATA...")
-      import play.api.libs.json._
       val json = Json.parse(jsonData)
+
+      val status = (json \ "status").asOpt[String].getOrElse("")
+      if (status.toUpperCase != "ENRICHED") {
+        println(s"SKIPPING: Trade status is '$status', not ENRICHED")
+        return
+      }
 
       println("JSON Fields found:")
       json.as[JsObject].fields.foreach { case (key, value) =>
-        println(s"  $key: $value (type: ${value.getClass.getSimpleName})")
+        println(s"  $key: $value")
       }
 
       println("\nATTEMPTING TO PARSE AS TRADE...")
@@ -90,6 +141,11 @@ object ValidationSubscriber {
         println(s"Price: ${trade.price}")
         println(s"Side: ${trade.side}")
         println(s"Status: ${trade.status}")
+
+        if (trade.status.toUpperCase != "ENRICHED") {
+          println(s"ERROR: Trade status changed to '${trade.status}', skipping validation.")
+          return
+        }
 
         println("\nVALIDATING TRADE...")
         val validationResult = ValidationService.validateTrade(trade, validationRules)
@@ -111,7 +167,7 @@ object ValidationSubscriber {
 
     } catch {
       case e: Exception =>
-        println(s"General error: ${e.getMessage}")
+        println(s"Error processing trade message: ${e.getMessage}")
     }
   }
 
@@ -123,6 +179,7 @@ object ValidationSubscriber {
       case e: Exception =>
         println(s"getData error: ${e.getMessage}")
     }
+
     "{}"
   }
 }
