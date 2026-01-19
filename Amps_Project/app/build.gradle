@@ -34,10 +34,6 @@ dependencies {
     // Configuration (optional)
     implementation("com.typesafe:config:1.4.2")
 
-    testImplementation 'io.cucumber:cucumber-java:7.15.0'
-    testImplementation 'io.cucumber:cucumber-junit:7.15.0'
-    testImplementation 'io.cucumber:cucumber-scala_2.13:8.20.0'
-
 
     // implementation 'com.typesafe.akka:akka-http-spray-json_2.13:10.5.0'
 }
@@ -50,17 +46,4 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(17)
     }
-}
-test {
-    useJUnit()  // MUST use JUnit 4 (not JUnit 5)
-
-    testLogging {
-        events "passed", "skipped", "failed", "standardOut", "standardError"
-        showStandardStreams = true
-    }
-
-    systemProperties = [
-            'cucumber.filter.tags': System.getProperty('tags', ''),
-            'cucumber.plugin': System.getProperty('cucumber.plugin', 'pretty')
-    ]
 }

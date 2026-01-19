@@ -3,7 +3,6 @@ package AMPS
 import com.crankuptheamps.client._
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import scala.util.Try
 import play.api.libs.json._
 
 object ValidationSubscriber {
@@ -38,32 +37,13 @@ object ValidationSubscriber {
         }
       }
 
-      scheduler.scheduleAtFixedRate(task, 0, 2, TimeUnit.SECONDS)
+      scheduler.scheduleAtFixedRate(task, 0, Long.MaxValue, TimeUnit.SECONDS)
 
       println(s"Scheduler started - checking $subscribeTopic every 5 seconds for NEW trades")
-      println("Will run for 2 minutes then terminate")
 
       Thread.sleep(2 * 60 * 1000)
 
-      println("\nTimeout reached (2 minutes). Stopping...")
       isRunning = false
-
-      Try {
-        scheduler.shutdown()
-        if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
-          scheduler.shutdownNow()
-        }
-        println("Scheduler stopped")
-      }
-
-    } catch {
-      case e: Exception =>
-        println(s"Error: ${e.getMessage}")
-        e.printStackTrace()
-    } finally {
-      client.close()
-      println("Disconnected from AMPS")
-      println("Validation Service stopped")
     }
   }
 
